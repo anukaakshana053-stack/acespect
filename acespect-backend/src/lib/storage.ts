@@ -12,9 +12,19 @@ let _client: SupabaseClient | null = null;
 function client(): SupabaseClient | null {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
   if (!_client) {
-    _client = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
+    // createClient() also wires up a Realtime websocket client, which throws
+    // synchronously on runtimes without a native WebSocket global (Node < 22).
+    // We only use Storage here, so a Realtime init failure shouldn't be fatal —
+    // treat it the same as "not configured" rather than crashing the process.
+    try {
+      _client = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false },
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('⚠️  Failed to initialize the Supabase client.', err);
+      return null;
+    }
   }
   return _client;
 }
