@@ -1,0 +1,265 @@
+// ACE SPECT — database schema (PostgreSQL / Supabase)
+// Auth slice only for now. Inspection / media / sync tables land here next.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Single role for v1 (INSPECTOR). The enum is defined wide so RBAC can
+/// expand to ADMIN / REVIEWER / CLIENT without a data migration.
+enum Role {
+  INSPECTOR
+  ADMIN
+  REVIEWER
+  CLIENT
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  // Nullable: Google-only accounts have no local password.
+  passwordHash String?
+  name         String?
+  phone        String?
+  // Set when the account is linked to a Google identity (the Google "sub").
+  googleId     String?  @unique
+  avatarUrl    String?
+  avatar       String?  // short initials shown in the web UI, e.g. "JT"
+  region       String?
+  role         Role     @default(INSPECTOR)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens   RefreshToken[]
+  inspections     Inspection[]     @relation("InspectorInspections")
+  assignedReviews Inspection[]     @relation("ReviewerInspections")
+  reviewDecisions ReviewDecision[] @relation("ReviewerDecisions")
+
+  @@map("users")
+}
+
+// ───────────────────────── Inspection lifecycle (web review workflow) ─────────────
+enum InspectionStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum SectionStatus {
+  COMPLETE
+  PARTIAL
+  PENDING
+}
+
+enum SectionReviewStatus {
+  PENDING
+  APPROVED
+  REVISION_REQUESTED
+}
+
+/// Opaque refresh tokens, stored hashed (SHA-256). Enables rotation and
+/// server-side revocation — a stolen refresh token can be invalidated,
+/// which a stateless JWT refresh cannot.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ───────────────────────── Inspection + AI review pipeline ─────────────────────────
+// A submitted inspection is reviewed asynchronously by a multi-agent worker
+// (form ∥ photo → risk → summary). The queue/worker lives in the app; the agents
+// run in a separate Python LangGraph service the worker calls over HTTP.
+
+enum ReviewStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum AgentKind {
+  PHOTO
+  FORM
+  RISK
+  SUMMARY
+}
+
+/// Lifecycle of the human reviewer's verdict on the AI summary. AI output is
+/// advisory — a reviewer always approves / edits / rejects before it's final.
+enum SummaryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EDITED
+}
+
+enum DecisionKind {
+  APPROVED
+  REJECTED
+  EDITED
+}
+
+/// A building inspection. Inspectors fill it (mobile) section by section;
+/// reviewers act on it (web) per-section. `payload`/`photos` are legacy slots
+/// kept for the AI pipeline; the structured form lives in `sections`.
+model Inspection {
+  id              String           @id @default(uuid())
+  jobNo           String?
+  inspector       User             @relation("InspectorInspections", fields: [inspectorId], references: [id])
+  inspectorId     String
+  reviewer        User?            @relation("ReviewerInspections", fields: [reviewerId], references: [id])
+  reviewerId      String?
+  address         String?
+  suburb          String?
+  client          String?
+  inspectionType  String           @default("Dilapidation")
+  propertyType    String           @default("Residential House")
+  status          InspectionStatus @default(DRAFT)
+  overallProgress Int              @default(0)
+  notes           String           @default("")
+  date            DateTime         @default(now())
+  version         Int              @default(1)
+  payload         Json?
+  photos          Json?
+  submittedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  sections      Section[]
+  reviewJobs    ReviewJob[]
+  reviewSummary ReviewSummary?
+
+  @@index([inspectorId])
+  @@index([reviewerId])
+  @@map("inspections")
+}
+
+/// One section of an inspection form (Job Info, Driveway, …). Holds the
+/// inspector's field data + photos + damages, and the reviewer's verdict.
+model Section {
+  id            String              @id @default(uuid())
+  inspection    Inspection          @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId  String
+  key           String // stable slug e.g. "driveway"
+  name          String
+  icon          String              @default("")
+  order         Int                 @default(0)
+  status        SectionStatus       @default(PENDING)
+  reviewStatus  SectionReviewStatus @default(PENDING)
+  reviewComment String              @default("")
+  reportText    String              @default("")
+  fields        Json                @default("{}")
+  photos        Json                @default("[]")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  damages Damage[]
+
+  @@index([inspectionId])
+  @@map("sections")
+}
+
+/// A defect record within a section (crack, leaning post, …).
+model Damage {
+  id        String  @id @default(uuid())
+  section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sectionId String
+  type      String
+  location  String  @default("")
+  direction String  @default("")
+  widthMm   Float   @default(0)
+  lengthMm  Float   @default(0)
+  notes     String  @default("")
+  photos    Json    @default("[]")
+  order     Int     @default(0)
+
+  @@index([sectionId])
+  @@map("damages")
+}
+
+/// One review run for a given inspection version. The (inspectionId, version)
+/// uniqueness + the BullMQ jobId of the same shape make re-submits idempotent.
+model ReviewJob {
+  id           String       @id @default(uuid())
+  inspection   Inspection   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId String
+  version      Int
+  status       ReviewStatus @default(QUEUED)
+  attempts     Int          @default(0)
+  error        String?
+  queuedAt     DateTime     @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  results AgentResult[]
+
+  @@unique([inspectionId, version])
+  @@index([status])
+  @@map("review_jobs")
+}
+
+/// Structured output of a single agent node (typed JSON), plus run metadata
+/// for cost/latency tracking.
+model AgentResult {
+  id          String    @id @default(uuid())
+  reviewJob   ReviewJob @relation(fields: [reviewJobId], references: [id], onDelete: Cascade)
+  reviewJobId String
+  agent       AgentKind
+  output      Json
+  model       String?
+  tokensUsed  Int?
+  latencyMs   Int?
+  createdAt   DateTime  @default(now())
+
+  @@unique([reviewJobId, agent])
+  @@index([reviewJobId])
+  @@map("agent_results")
+}
+
+/// The reviewer-facing synthesis (one per inspection) the Summary agent produces.
+model ReviewSummary {
+  id           String        @id @default(uuid())
+  inspection   Inspection    @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId String        @unique
+  riskScore    Int?
+  flags        Json?
+  summaryText  String?
+  status       SummaryStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  decisions ReviewDecision[]
+
+  @@map("review_summaries")
+}
+
+/// Audit trail of human decisions on a summary (who, what, when, why).
+model ReviewDecision {
+  id              String        @id @default(uuid())
+  reviewSummary   ReviewSummary @relation(fields: [reviewSummaryId], references: [id], onDelete: Cascade)
+  reviewSummaryId String
+  reviewer        User          @relation("ReviewerDecisions", fields: [reviewerId], references: [id])
+  reviewerId      String
+  decision        DecisionKind
+  notes           String?
+  decidedAt       DateTime      @default(now())
+
+  @@index([reviewSummaryId])
+  @@map("review_decisions")
+}

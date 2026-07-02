@@ -1,0 +1,30 @@
+# Local Postgres for development/testing.
+# Start with:  docker compose up -d
+# Then point DATABASE_URL at it (see .env.example) and run `npm run prisma:migrate`.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: acespect-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: acespect
+      POSTGRES_PASSWORD: acespect
+      POSTGRES_DB: acespect
+    ports:
+      - '5432:5432'
+    volumes:
+      - acespect_pgdata:/var/lib/postgresql/data
+
+  # Redis backs the BullMQ review queue.
+  redis:
+    image: redis:7-alpine
+    container_name: acespect-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - acespect_redisdata:/data
+
+volumes:
+  acespect_pgdata:
+  acespect_redisdata:
