@@ -1,8 +1,24 @@
 # ACE SPECT — Quick Deploy Runbook
 
-Stack: **Railway** (backend API + Postgres + Redis + optional worker) · **Vercel** (web) · **EAS** (Android APK).
+Stack: **Railway** (backend API + Postgres + Redis) · **Vercel** (web) · **EAS** (Android APK).
 
-Builds verified locally: backend `npm run build` ✓, web `npm run build` ✓, mobile `tsc` ✓.
+## ✅ Live deployment (deployed 2026-07-02)
+| Piece | URL | Notes |
+|---|---|---|
+| Backend API | https://acespect-backend-production.up.railway.app | health: `/health`, API base: `/api/v1` |
+| Web (reviewer/inspector) | https://acespect-web.vercel.app | Vercel project `anuka1/acespect-web` |
+| Railway project | https://railway.com/project/2d8b8083-7911-41cb-a5d1-dec3f1f7dd53 | services: acespect-backend, Postgres, Redis |
+| EAS project | https://expo.dev/accounts/anuka02/projects/acespect-mobile | Android preview APK build |
+
+**Seeded logins:** inspector `jane@acespect.app / Inspect123` · reviewer `reviewer@acespect.app / Review123` · admin `admin@acespect.app / Admin123`.
+
+**Known issues found + fixed during deploy** (now committed, so future deploys won't hit these):
+1. `Dockerfile` was `node:20-alpine` — `@supabase/supabase-js`'s realtime client needs native `WebSocket`, which requires **Node ≥ 22**. Crashed on boot with a clear stack trace. Fixed: bumped both stages to `node:22-alpine`.
+2. `railway.json`'s `startCommand` was a bare `"a && b"` string — Railway does not reliably shell-interpret un-wrapped `&&` chains, so `node dist/server.js` silently never ran after `prisma migrate deploy` finished (no crash, no log, container just sat there until Railway's healthcheck killed it as unresponsive). Fixed: wrapped explicitly as `sh -c "a && exec b"`.
+3. `server.ts`'s storage-bucket check ran unguarded outside try/catch with no `.catch()` on `main()` — any thrown error there would die as a silent unhandled rejection. Fixed: full try/catch + `main().catch(...)` that always logs and exits non-zero.
+4. `schema.prisma` had `sections`/`damages` tables + several `inspections`/`users` columns that were never captured in a migration (added via `db push` in a parallel session). `prisma migrate deploy` reported "up to date" while the live DB was actually missing them. Fixed: generated the missing migration via `prisma migrate diff` against the live DB, reviewed, applied, and committed it.
+
+---
 
 > This session can't run the logins for you. Run the commands below in a normal terminal.
 > **Order matters:** deploy the backend first to get its URL, then plug that URL into the web + mobile.
