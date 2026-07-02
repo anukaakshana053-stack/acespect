@@ -1,0 +1,108 @@
+# ACE SPECT — Quick Deploy Runbook
+
+Stack: **Railway** (backend API + Postgres + Redis + optional worker) · **Vercel** (web) · **EAS** (Android APK).
+
+Builds verified locally: backend `npm run build` ✓, web `npm run build` ✓, mobile `tsc` ✓.
+
+> This session can't run the logins for you. Run the commands below in a normal terminal.
+> **Order matters:** deploy the backend first to get its URL, then plug that URL into the web + mobile.
+
+---
+
+## 0. Prereqs (one-time)
+- Accounts: [Railway](https://railway.app), [Vercel](https://vercel.com), [Expo](https://expo.dev), [Supabase](https://supabase.com) (all free tier).
+- CLIs: `npm i -g eas-cli vercel` (Railway is easiest via its web dashboard).
+- Push this repo to GitHub (Railway + Vercel deploy from a repo). From the repo root:
+  ```bash
+  git add -A && git commit -m "Deploy configs" && git push
+  ```
+
+**Both Redis and real photo uploads are required for this deploy** — not optional. Redis backs the review queue that submit depends on; Supabase Storage is where inspection photos actually live (without it, any submit containing a photo fails).
+
+---
+
+## 1. Supabase — photo storage (do this first)
+1. [supabase.com](https://supabase.com) → **New Project** (pick any region/name, save the DB password somewhere — not used by this app, but Supabase requires one).
+2. Project → **Settings → API**. Copy:
+   - **Project URL** → `SUPABASE_URL`
+   - **service_role secret** (NOT the `anon` key — the backend needs write access) → `SUPABASE_SERVICE_ROLE_KEY`
+3. That's it — you do **not** need to create the bucket by hand. The backend calls `ensureBucket()` on boot and creates a public bucket named `inspection-photos` automatically the first time it starts with these two vars set.
+
+---
+
+## 2. Backend + Postgres + Redis → Railway
+1. Railway → **New Project → Deploy from GitHub repo** → pick this repo.
+2. On the created service → **Settings**:
+   - **Root Directory:** `acespect-backend`  (uses its `Dockerfile` + `railway.json`)
+   - Railway auto-runs `npx prisma migrate deploy && node dist/server.js` on start.
+3. **+ New → Database → Add PostgreSQL**, then **+ New → Database → Add Redis** (same project) — **required**, the review queue (and therefore mobile submit) depends on it.
+4. Backend service → **Variables** → add:
+   ```
+   NODE_ENV=production
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   REDIS_URL=${{Redis.REDIS_URL}}
+   JWT_ACCESS_SECRET=8e4b5792050bbfcca674902100f3414749f4f5c273fd5f9479da84f85d72f2de
+   JWT_REFRESH_SECRET=35a0394e433b3653a98a58cc2df4734e85b11dd9e4589e20b8e58bda6c6277fc
+   CORS_ORIGIN=*
+   SUPABASE_URL=<Project URL from Supabase step 1>
+   SUPABASE_SERVICE_ROLE_KEY=<service_role secret from Supabase step 1>
+   SUPABASE_STORAGE_BUCKET=inspection-photos
+   ```
+   (`${{Postgres.DATABASE_URL}}` / `${{Redis.REDIS_URL}}` are Railway reference variables — pick them from the dropdown, don't type them by hand.)
+5. **Networking → Generate Domain**. Copy the URL, e.g. `https://acespect-backend-production.up.railway.app`.
+   Your API base is that URL **+ `/api/v1`**.
+6. **Seed users + one demo inspection** (once). Railway service → **⋯ → Run a command** (or `railway run` locally):
+   ```bash
+   npx tsx scripts/seedInspection.ts
+   ```
+   Creates: inspector `jane@acespect.app / Inspect123`, reviewer `reviewer@acespect.app / Review123`, admin `admin@acespect.app / Admin123`.
+7. Verify:
+   - `https://<backend>/health` → `{"status":"ok"}`
+   - Railway → service → **Logs** → on boot you should see `✅ Database connected` and `✅ Photo storage ready (bucket "inspection-photos")`. If you instead see `⚠️ Photo storage disabled`, the Supabase vars are missing/wrong — fix and redeploy.
+
+**Review worker** (processes the AI review queue — needed so submitted inspections get reviewed, not just stored): add a **second service** from the same repo, Root Directory `acespect-backend`, **Start Command** `node dist/worker/index.js`, same Variables. (AI itself is optional: leave `AI_SERVICE_URL` empty → the worker simulates the review instead of calling a real AI service.)
+
+---
+
+## 3. Web → Vercel
+1. Vercel → **Add New → Project** → import this repo.
+2. **Root Directory:** `acespect-web`  (Framework auto-detects **Vite**; build `npm run build`, output `dist`). `vercel.json` handles SPA routing.
+3. **Environment Variables:**
+   ```
+   VITE_API_URL=https://<your-railway-backend>/api/v1
+   ```
+4. **Deploy.** Then copy the Vercel URL (e.g. `https://acespect-web.vercel.app`).
+5. Back in Railway, set the backend `CORS_ORIGIN` to that Vercel URL (tighten from `*`) and redeploy.
+6. Log in at the Vercel URL as `reviewer@acespect.app / Review123` → you should see the seeded inspection.
+
+---
+
+## 4. Mobile → Android APK via EAS
+1. Put the backend URL into **`acespect-mobile/eas.json`** — replace both `REPLACE-WITH-RAILWAY-BACKEND` placeholders (in `preview` and `production`) with your real Railway backend, keeping the trailing `/api/v1`.
+2. From `acespect-mobile`:
+   ```bash
+   eas login
+   eas init          # creates the EAS project + fills extra.eas.projectId
+   eas build -p android --profile preview
+   ```
+3. When it finishes (~10–20 min in Expo's cloud) you get an **APK download link**. Install it on any Android device (allow "install unknown apps").
+4. In the app, log in as `jane@acespect.app / Inspect123`, complete an inspection with at least one photo, submit → it should appear in the Vercel web reviewer with the photo rendering (proves Redis + Supabase are both wired correctly).
+
+> If the Android build fails on the WatermelonDB native step, it's not used at runtime (the app submits online, not via the local DB). Quick fix: remove `"@morrowdigital/watermelondb-expo-plugin"` and `"expo-build-properties"` from `app.json` → `plugins`, then rebuild.
+
+---
+
+## Env var reference (backend)
+| Var | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Railway Postgres reference |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | ✅ | ≥16 chars (generated values above) |
+| `REDIS_URL` | ✅ | Railway Redis reference — mobile submit fails without it |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | ✅ | from Supabase step 1 — photo upload returns 503 without it |
+| `SUPABASE_STORAGE_BUCKET` | ✅ | `inspection-photos` — auto-created on boot if missing |
+| `CORS_ORIGIN` | recommended | set to the Vercel URL |
+| `AI_SERVICE_URL` | optional | empty → worker simulates review |
+| `PORT` | auto | Railway sets it; app defaults 4000 |
+
+## Deploy order recap
+Supabase (photo storage creds) → backend (Railway, incl. Redis) → get backend URL → web `VITE_API_URL` (Vercel) + mobile `eas.json` URL → build web + APK.
