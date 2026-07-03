@@ -70,6 +70,23 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [loadData]);
 
+  // Inspections are submitted from the mobile app, so a tab left open on the
+  // web dashboard never sees new/updated rows until something refetches. Do
+  // that when the tab regains focus (e.g. switching back from checking a
+  // phone) rather than requiring a manual page reload.
+  useEffect(() => {
+    if (!currentUser) return;
+    const onFocus = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [currentUser, loadData]);
+
   const login = useCallback(
     async (email: string, password: string) => {
       const u = await api.login(email, password);
