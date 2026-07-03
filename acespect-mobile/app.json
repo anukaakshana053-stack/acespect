@@ -44,8 +44,7 @@
           "locationWhenInUsePermission": "ACE SPECT uses your location to GPS-stamp inspections and confirm the property address."
         }
       ],
-      "expo-build-properties",
-      "@morrowdigital/watermelondb-expo-plugin"
+      "expo-build-properties"
     ],
     "extra": {
       "eas": {
