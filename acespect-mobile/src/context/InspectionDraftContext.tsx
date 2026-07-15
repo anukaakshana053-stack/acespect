@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import type { ActiveTemplate } from '../services/templateApi';
 
 /**
  * In-memory draft of the inspection being filled. Each section screen writes its
@@ -54,6 +55,15 @@ interface DraftValue {
   collectPhotoUris: () => string[];
   /** Build the submit payload, mapping each local photo URI via `resolve`. */
   buildPayload: (resolve: (uri: string) => string) => SubmitPayload;
+  /**
+   * The admin-published template a section screen fetched at the start of
+   * this draft, pinned for the session. Screens must reuse whatever's here
+   * rather than refetching, so an inspection already in progress keeps
+   * rendering the version it started with even if admin publishes a newer
+   * one mid-session.
+   */
+  getActiveTemplate: (sectionKey: string) => ActiveTemplate | undefined;
+  setActiveTemplate: (sectionKey: string, template: ActiveTemplate) => void;
 }
 
 const Ctx = createContext<DraftValue | null>(null);
@@ -68,6 +78,7 @@ export function InspectionDraftProvider({ children }: { children: React.ReactNod
   const topRef = useRef<DraftTop>({ inspectionType: 'Dilapidation', propertyType: 'Residential House' });
   const sectionsRef = useRef<Record<string, DraftSection>>({});
   const photosRef = useRef<Record<string, string[]>>({});
+  const templatesRef = useRef<Record<string, ActiveTemplate>>({});
 
   const setTop = useCallback((patch: Partial<DraftTop>) => {
     topRef.current = { ...topRef.current, ...patch };
@@ -86,6 +97,16 @@ export function InspectionDraftProvider({ children }: { children: React.ReactNod
     topRef.current = { inspectionType: 'Dilapidation', propertyType: 'Residential House' };
     sectionsRef.current = {};
     photosRef.current = {};
+    templatesRef.current = {};
+  }, []);
+
+  const getActiveTemplate = useCallback(
+    (sectionKey: string) => templatesRef.current[sectionKey],
+    [],
+  );
+
+  const setActiveTemplate = useCallback((sectionKey: string, template: ActiveTemplate) => {
+    templatesRef.current = { ...templatesRef.current, [sectionKey]: template };
   }, []);
 
   // Photos registered under a section key or any "key:n" sub-key.
@@ -125,8 +146,17 @@ export function InspectionDraftProvider({ children }: { children: React.ReactNod
   // Force re-render is unnecessary — writers use refs, the reader (submit) pulls
   // current values on demand. Keep a stable value object.
   const value = useMemo<DraftValue>(
-    () => ({ setTop, setSection, addPhoto, reset, collectPhotoUris, buildPayload }),
-    [setTop, setSection, addPhoto, reset, collectPhotoUris, buildPayload],
+    () => ({
+      setTop,
+      setSection,
+      addPhoto,
+      reset,
+      collectPhotoUris,
+      buildPayload,
+      getActiveTemplate,
+      setActiveTemplate,
+    }),
+    [setTop, setSection, addPhoto, reset, collectPhotoUris, buildPayload, getActiveTemplate, setActiveTemplate],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

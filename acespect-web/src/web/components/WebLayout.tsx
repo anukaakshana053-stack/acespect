@@ -19,6 +19,7 @@ const ROLE_NAV: Record<Role, { to: string; icon: React.ElementType; label: strin
   admin: [
     { to: "/admin/dashboard",   icon: LayoutDashboard, label: "Dashboard" },
     { to: "/admin/inspections", icon: ClipboardCheck,  label: "Inspections" },
+    { to: "/admin/templates",   icon: FileText,         label: "Templates" },
     { to: "/admin/users",       icon: Users,            label: "Users" },
     { to: "/admin/reports",     icon: BarChart3,        label: "Reports" },
     { to: "/admin/settings",    icon: Settings,         label: "Settings" },

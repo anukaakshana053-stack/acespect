@@ -1,4 +1,4 @@
-import type { Inspection, Role, User, InspectionStatus, SectionReviewStatus } from "./mockData";
+import type { Inspection, Role, User, InspectionStatus, SectionReviewStatus, Template, TemplateField } from "./mockData";
 
 export const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:4000/api/v1";
@@ -100,4 +100,16 @@ export const api = {
 
   updateInspection: (id: string, patch: { status?: InspectionStatus; notes?: string; reviewerId?: string | null }) =>
     req<{ inspection: Inspection }>(`/web/inspections/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+
+  getTemplates: (sectionKey: string) =>
+    req<{ templates: Template[] }>(`/templates?sectionKey=${encodeURIComponent(sectionKey)}`).then((d) => d.templates),
+  getTemplate: (id: string) => req<{ template: Template }>(`/templates/${id}`).then((d) => d.template),
+  createTemplate: (data: { sectionKey: string; name: string; fields: TemplateField[] }) =>
+    req<{ template: Template }>("/templates", { method: "POST", body: JSON.stringify(data) }).then((d) => d.template),
+  updateTemplate: (id: string, patch: { name?: string; fields?: TemplateField[] }) =>
+    req<{ template: Template }>(`/templates/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then(
+      (d) => d.template,
+    ),
+  publishTemplate: (id: string) =>
+    req<{ template: Template }>(`/templates/${id}/publish`, { method: "POST" }).then((d) => d.template),
 };

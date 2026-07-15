@@ -55,6 +55,46 @@ export interface Inspection {
   notes: string;
 }
 
+/* ─── Inspection templates (admin-defined form structure) ──────────── */
+export type TemplateStatus = "draft" | "published" | "archived";
+export type TemplateFieldType = "text" | "date" | "select-tiles" | "yesno";
+
+export interface TemplateFieldOption {
+  value: string;
+  label: string;
+  icon?: string;
+}
+
+export interface TemplateField {
+  key: string;
+  label: string;
+  type: TemplateFieldType;
+  order: number;
+  required?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  options?: TemplateFieldOption[];
+}
+
+export interface Template {
+  id: string;
+  sectionKey: string;
+  name: string;
+  version: number;
+  status: TemplateStatus;
+  fields: TemplateField[];
+  createdById: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const TEMPLATE_STATUS_CONFIG: Record<TemplateStatus, { label: string; color: string; bg: string }> = {
+  draft:     { label: "Draft",     color: "#64748b", bg: "#f1f5f9" },
+  published: { label: "Published", color: "#16a34a", bg: "#dcfce7" },
+  archived:  { label: "Archived",  color: "#94a3b8", bg: "#f8fafc" },
+};
+
 /* ─── Users ─────────────────────────────────────────────────────── */
 export const USERS: User[] = [
   { id: "u1", name: "Admin User",       email: "admin@acespect.com.au",    role: "admin",     avatar: "AU", region: "VIC" },

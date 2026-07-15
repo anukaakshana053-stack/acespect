@@ -29,17 +29,18 @@ model User {
   // Set when the account is linked to a Google identity (the Google "sub").
   googleId     String?  @unique
   avatarUrl    String?
-  avatar       String?  // short initials shown in the web UI, e.g. "JT"
+  avatar       String? // short initials shown in the web UI, e.g. "JT"
   region       String?
   role         Role     @default(INSPECTOR)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  refreshTokens   RefreshToken[]
-  inspections     Inspection[]     @relation("InspectorInspections")
-  assignedReviews Inspection[]     @relation("ReviewerInspections")
-  reviewDecisions ReviewDecision[] @relation("ReviewerDecisions")
+  refreshTokens    RefreshToken[]
+  inspections      Inspection[]         @relation("InspectorInspections")
+  assignedReviews  Inspection[]         @relation("ReviewerInspections")
+  reviewDecisions  ReviewDecision[]     @relation("ReviewerDecisions")
+  createdTemplates InspectionTemplate[]
 
   @@map("users")
 }
@@ -191,6 +192,36 @@ model Damage {
 
   @@index([sectionId])
   @@map("damages")
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Admin-defined structure of a section's fields (labels, types, order),
+/// versioned per `sectionKey`. Publishing a new version archives the
+/// previously-published one rather than mutating it, so an inspection
+/// already in progress keeps rendering whichever version it started with —
+/// the mobile app pins the template it fetched at the start of the draft.
+/// `fields` is unstructured JSON (a TemplateField[] shape), matching how
+/// Section.fields is already unstructured/client-driven in this schema.
+model InspectionTemplate {
+  id          String         @id @default(uuid())
+  sectionKey  String // "job-info" for the pilot; future sections use their own key
+  name        String
+  version     Int // increments per sectionKey lineage
+  status      TemplateStatus @default(DRAFT)
+  fields      Json // TemplateField[]
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  createdById String
+  publishedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([sectionKey, status])
+  @@map("inspection_templates")
 }
 
 /// One review run for a given inspection version. The (inspectionId, version)

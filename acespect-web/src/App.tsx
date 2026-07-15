@@ -10,6 +10,8 @@ import { InspectorFormEditor } from "./web/pages/inspector/InspectorFormEditor";
 import { AdminDashboard } from "./web/pages/admin/AdminDashboard";
 import { AdminInspections } from "./web/pages/admin/AdminInspections";
 import { AdminUsers } from "./web/pages/admin/AdminUsers";
+import { AdminTemplates } from "./web/pages/admin/AdminTemplates";
+import { AdminTemplateEditor } from "./web/pages/admin/AdminTemplateEditor";
 import { ReportView } from "./web/pages/ReportView";
 import type { Role } from "./web/mockData";
 
@@ -62,6 +64,8 @@ export default function App() {
             <Route path="/admin/inspections" element={<AdminInspections />} />
             <Route path="/admin/inspections/:id" element={<ReviewerFormView />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/templates" element={<AdminTemplates />} />
+            <Route path="/admin/templates/:id" element={<AdminTemplateEditor />} />
             <Route path="/admin/reports" element={<Placeholder title="Reports" />} />
             <Route path="/admin/settings" element={<Placeholder title="Settings" />} />
           </Route>
