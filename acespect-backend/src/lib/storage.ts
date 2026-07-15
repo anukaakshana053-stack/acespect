@@ -1,6 +1,16 @@
 import { randomUUID } from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import sharp from 'sharp';
 import { env } from '../config/env';
+
+// Every photo used in the review UI and the generated report is resized to
+// one consistent size at upload time -- this replaces the old manual
+// "select all, right-click, Resize Pictures to Medium" desktop workflow.
+// 1366x768 mirrors that tool's "Medium" preset; it keeps reports fast to
+// generate without a visible quality loss.
+const REPORT_MAX_WIDTH = 1366;
+const REPORT_MAX_HEIGHT = 768;
+const REPORT_JPEG_QUALITY = 82;
 
 /**
  * Supabase Storage for inspection photos. Express owns the upload (service-role
@@ -50,7 +60,7 @@ export interface UploadedPhoto {
   url: string;
 }
 
-/** Upload one image; returns its storage key + public URL. */
+/** Upload one image; resizes it for the report/UI and returns its storage key + public URL. */
 export async function uploadPhoto(
   buffer: Buffer,
   contentType: string,
@@ -60,11 +70,38 @@ export async function uploadPhoto(
   if (!c) throw new Error('Photo storage is not configured');
 
   const id = randomUUID();
-  const storageKey = `inspections/${id}.${ext}`;
+
+  // rotate() with no args bakes in the EXIF orientation tag (phone photos are
+  // often stored sideways/upside-down relative to how they should display)
+  // then strips it, so the resized copy always renders right-side-up.
+  const resized = await sharp(buffer)
+    .rotate()
+    .resize({
+      width: REPORT_MAX_WIDTH,
+      height: REPORT_MAX_HEIGHT,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: REPORT_JPEG_QUALITY })
+    .toBuffer();
+
+  const storageKey = `inspections/${id}.jpg`;
   const { error } = await c.storage
     .from(env.SUPABASE_STORAGE_BUCKET)
-    .upload(storageKey, buffer, { contentType, upsert: false });
+    .upload(storageKey, resized, { contentType: 'image/jpeg', upsert: false });
   if (error) throw new Error(`Supabase upload failed: ${error.message}`);
+
+  // Keep the untouched original alongside it -- not linked anywhere in the
+  // app today, but preserved in case a full-resolution copy is ever needed.
+  // Non-fatal: the report copy above is what the app actually depends on.
+  const originalKey = `inspections/${id}-original.${ext}`;
+  const { error: originalError } = await c.storage
+    .from(env.SUPABASE_STORAGE_BUCKET)
+    .upload(originalKey, buffer, { contentType, upsert: false });
+  if (originalError) {
+    // eslint-disable-next-line no-console
+    console.error('⚠️  Failed to store the original photo (resized report copy still saved).', originalError);
+  }
 
   const { data } = c.storage.from(env.SUPABASE_STORAGE_BUCKET).getPublicUrl(storageKey);
   return { id, storageKey, url: data.publicUrl };
