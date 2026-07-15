@@ -4,6 +4,7 @@ export const sectionUpdateSchema = z.object({
   reviewStatus: z.enum(['pending', 'approved', 'revision-requested']).optional(),
   reviewComment: z.string().max(2000).optional(),
   reportText: z.string().max(20000).optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const inspectionUpdateSchema = z.object({

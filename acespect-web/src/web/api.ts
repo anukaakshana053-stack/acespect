@@ -90,7 +90,12 @@ export const api = {
 
   updateSection: (
     id: string,
-    patch: { reviewStatus?: SectionReviewStatus; reviewComment?: string; reportText?: string },
+    patch: {
+      reviewStatus?: SectionReviewStatus;
+      reviewComment?: string;
+      reportText?: string;
+      fields?: Record<string, unknown>;
+    },
   ) => req<{ section: unknown }>(`/web/sections/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
 
   updateInspection: (id: string, patch: { status?: InspectionStatus; notes?: string; reviewerId?: string | null }) =>

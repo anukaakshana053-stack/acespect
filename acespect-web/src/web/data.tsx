@@ -17,7 +17,12 @@ interface AppData {
   patchSection: (
     inspectionId: string,
     sectionId: string,
-    patch: { reviewStatus?: SectionReviewStatus; reviewComment?: string; reportText?: string },
+    patch: {
+      reviewStatus?: SectionReviewStatus;
+      reviewComment?: string;
+      reportText?: string;
+      fields?: Record<string, unknown>;
+    },
   ) => Promise<void>;
   patchInspection: (id: string, patch: { status?: Inspection["status"]; notes?: string }) => Promise<void>;
 }

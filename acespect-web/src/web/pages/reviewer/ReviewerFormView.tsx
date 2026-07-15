@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   ArrowLeft, CheckCircle, RotateCcw, Send, ChevronRight,
-  Image as ImageIcon, FileText, AlertTriangle, Layers,
+  Image as ImageIcon, FileText, AlertTriangle, Layers, Save,
 } from "lucide-react";
 import {
   STATUS_CONFIG,
@@ -130,6 +130,126 @@ function FieldsView({ section }: { section: FormSection }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ─── Job Information: editable field data (feeds the report header) ── */
+const JOB_INFO_FIELDS: { key: string; label: string; type: "text" | "email" | "date" | "textarea" }[] = [
+  { key: "date", label: "Date", type: "date" },
+  { key: "clientName", label: "Client Name", type: "text" },
+  { key: "clientEmail", label: "Client Email", type: "email" },
+  { key: "yourReference", label: "Client Project Reference", type: "text" },
+  { key: "jobNo", label: "Job Number", type: "text" },
+  { key: "propertyOwner", label: "Property Owner Name", type: "text" },
+  { key: "propertyOwnerEmail", label: "Property Owner Email", type: "email" },
+  { key: "address", label: "Property Address", type: "text" },
+  { key: "weather", label: "Weather", type: "text" },
+  { key: "inspector", label: "Inspector Name", type: "text" },
+  { key: "inspectorRegistration", label: "Inspector DBU License", type: "text" },
+  { key: "purpose", label: "General Statement (Inspection Summary)", type: "textarea" },
+];
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: "8px",
+  border: "1.5px solid #e5e7eb",
+  background: "white",
+  fontSize: "13px",
+  color: "#1a2a4a",
+  fontFamily: "Inter, -apple-system, sans-serif",
+  outline: "none",
+  boxSizing: "border-box",
+  transition: "border-color 0.12s",
+};
+
+function JobInfoFieldsForm({
+  section,
+  onSave,
+}: {
+  section: FormSection;
+  onSave: (fields: Record<string, unknown>) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Reseed the draft whenever the reviewer switches to a different section.
+  useEffect(() => {
+    setDraft(
+      Object.fromEntries(JOB_INFO_FIELDS.map(({ key }) => [key, formatFieldValue(section.fields[key] ?? "")])),
+    );
+    setSavedAt(null);
+  }, [section.id]);
+
+  const dirty = JOB_INFO_FIELDS.some(
+    ({ key }) => (draft[key] ?? "") !== formatFieldValue(section.fields[key] ?? ""),
+  );
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setSavedAt(Date.now());
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "14px 16px" }}>
+      {JOB_INFO_FIELDS.map(({ key, label, type }) => (
+        <div key={key}>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "4px" }}>
+            {label}
+          </label>
+          {type === "textarea" ? (
+            <textarea
+              rows={3}
+              value={draft[key] ?? ""}
+              onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+              style={{ ...inputStyle, resize: "vertical" }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#2563eb")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
+            />
+          ) : (
+            <input
+              type={type}
+              value={draft[key] ?? ""}
+              onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+              style={inputStyle}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#2563eb")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
+            />
+          )}
+        </div>
+      ))}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}>
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          style={{
+            padding: "8px 16px",
+            borderRadius: "8px",
+            background: !dirty || saving ? "#94a3b8" : "#1a2a4a",
+            color: "white",
+            fontSize: "12px",
+            fontWeight: 700,
+            border: "none",
+            cursor: !dirty || saving ? "not-allowed" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          <Save size={13} />
+          {saving ? "Saving…" : "Save Changes"}
+        </button>
+        {!dirty && savedAt && (
+          <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: 600 }}>Saved</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -391,6 +511,15 @@ export function ReviewerFormView() {
     }
   }
 
+  async function updateSectionFields(sectionId: string, fields: Record<string, unknown>) {
+    setBusy(true);
+    try {
+      await patchSection(inspection!.id, sectionId, { fields });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setReviewStatus(sectionId: string, status: SectionReviewStatus) {
     setBusy(true);
     try {
@@ -641,7 +770,19 @@ export function ReviewerFormView() {
             ) : (
               <>
                 {/* Fields card */}
-                {Object.keys(selectedSection.fields).length > 0 && (
+                {(selectedSection.key ?? selectedSection.id).startsWith("job-info") ? (
+                  <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", overflow: "hidden", marginBottom: "16px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                    <div style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                      <p style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0, display: "flex", alignItems: "center", gap: "5px" }}>
+                        <FileText size={12} /> Field Data — editable, feeds the report header
+                      </p>
+                    </div>
+                    <JobInfoFieldsForm
+                      section={selectedSection}
+                      onSave={(fields) => updateSectionFields(selectedSection.id, fields)}
+                    />
+                  </div>
+                ) : Object.keys(selectedSection.fields).length > 0 && (
                   <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", overflow: "hidden", marginBottom: "16px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
                     <div style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9" }}>
                       <p style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0, display: "flex", alignItems: "center", gap: "5px" }}>

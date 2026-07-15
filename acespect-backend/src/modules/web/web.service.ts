@@ -46,9 +46,9 @@ async function listUsers() {
   return rows.map(serializeUser);
 }
 
-/** Reviewer edits a section's verdict / report text. */
+/** Reviewer edits a section's verdict / report text / recorded field data. */
 async function updateSection(id: string, input: SectionUpdateInput) {
-  const exists = await prisma.section.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.section.findUnique({ where: { id }, select: { id: true, fields: true } });
   if (!exists) throw ApiError.notFound('Section not found');
 
   const row = await prisma.section.update({
@@ -57,6 +57,15 @@ async function updateSection(id: string, input: SectionUpdateInput) {
       ...(input.reviewStatus ? { reviewStatus: WEB_TO_REV_STATUS[input.reviewStatus] } : {}),
       ...(input.reviewComment !== undefined ? { reviewComment: input.reviewComment } : {}),
       ...(input.reportText !== undefined ? { reportText: input.reportText } : {}),
+      // Merge rather than replace so edits don't drop fields the form doesn't show (e.g. photo counters).
+      ...(input.fields
+        ? {
+            fields: {
+              ...(exists.fields as Prisma.InputJsonObject),
+              ...(input.fields as Prisma.InputJsonObject),
+            },
+          }
+        : {}),
     },
     include: { damages: { orderBy: { order: 'asc' } } },
   });
