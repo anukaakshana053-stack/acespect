@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Pencil, Eye, FileText, Clock } from "lucide-react";
+import { Pencil, Eye, FileText, Clock, Plus } from "lucide-react";
 import { PageShell, TableCard, StatusBadge } from "../../components/WebLayout";
 import { TEMPLATE_STATUS_CONFIG, type Template } from "../../mockData";
 import { api } from "../../api";
@@ -49,6 +49,17 @@ export function AdminTemplates() {
     }
   }
 
+  /** No template exists yet for this section at all -- start a blank draft. */
+  async function createFromScratch() {
+    setBusy(true);
+    try {
+      const created = await api.createTemplate({ sectionKey: SECTION_KEY, name: SECTION_NAME, fields: [] });
+      navigate(`/admin/templates/${created.id}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <PageShell title="Templates" subtitle="Define the fields inspectors fill in on mobile">
       <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "14px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -61,7 +72,7 @@ export function AdminTemplates() {
             {published ? `Live: v${published.version}, published ${formatDate(published.publishedAt)}` : "No published version yet"}
           </p>
         </div>
-        {published && (
+        {published ? (
           <button
             onClick={editPublished}
             disabled={busy}
@@ -73,6 +84,31 @@ export function AdminTemplates() {
           >
             <Pencil size={13} />
             {draft ? "Continue Draft" : "Edit"}
+          </button>
+        ) : draft ? (
+          <button
+            onClick={() => navigate(`/admin/templates/${draft.id}`)}
+            style={{
+              padding: "8px 16px", borderRadius: "8px", background: "#1a2a4a", color: "white",
+              fontSize: "12px", fontWeight: 700, border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: "6px",
+            }}
+          >
+            <Pencil size={13} />
+            Continue Draft
+          </button>
+        ) : (
+          <button
+            onClick={createFromScratch}
+            disabled={busy}
+            style={{
+              padding: "8px 16px", borderRadius: "8px", background: "#1a2a4a", color: "white",
+              fontSize: "12px", fontWeight: 700, border: "none", cursor: busy ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: "6px", opacity: busy ? 0.6 : 1,
+            }}
+          >
+            <Plus size={13} />
+            Create Template
           </button>
         )}
       </div>
