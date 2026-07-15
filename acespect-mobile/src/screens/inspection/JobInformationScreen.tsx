@@ -15,6 +15,7 @@ import { AppScreenProps } from '../../navigation/types';
 import { useSystemStatus } from '../../hooks/useSystemStatus';
 import { useInspectionDraft } from '../../context/InspectionDraftContext';
 import { ActiveTemplate, getActiveTemplate } from '../../services/templateApi';
+import { INSPECTION_TYPES, PROPERTY_LABELS } from '../../constants/inspectionData';
 
 const SECTION_KEY = 'job-info';
 
@@ -32,19 +33,35 @@ export function JobInformationScreen({
   // so the form renders whatever fields the admin's template defines.
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
+  const pinKey = `${selection.inspectionTypeId}:${selection.propertyTypeId}:${SECTION_KEY}`;
+
+  useEffect(() => {
+    // Job Information is first in the flow -- pin the raw ids onto the draft
+    // so every later section can address templates without re-threading
+    // navigation params.
+    const typeDef = INSPECTION_TYPES.find((t) => t.id === selection.inspectionTypeId);
+    draft.setTop({
+      inspectionTypeId: selection.inspectionTypeId,
+      propertyTypeId: selection.propertyTypeId,
+      inspectionType: typeDef?.title ?? selection.inspectionTypeId,
+      propertyType: PROPERTY_LABELS[selection.propertyTypeId] ?? selection.propertyTypeId,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     // Reuse whatever this draft already pinned rather than refetching, so an
     // inspection already in progress keeps the template version it started
     // with even if admin publishes a newer one mid-session.
-    const pinned = draft.getActiveTemplate(SECTION_KEY);
+    const pinned = draft.getActiveTemplate(pinKey);
     if (pinned) {
       setTemplate(pinned);
       return;
     }
     setLoadError(false);
-    getActiveTemplate(SECTION_KEY)
+    getActiveTemplate(selection.inspectionTypeId, selection.propertyTypeId, SECTION_KEY)
       .then((t) => {
-        draft.setActiveTemplate(SECTION_KEY, t);
+        draft.setActiveTemplate(pinKey, t);
         setTemplate(t);
       })
       .catch(() => setLoadError(true));
@@ -136,9 +153,9 @@ export function JobInformationScreen({
                 variant="outline"
                 onPress={() => {
                   setLoadError(false);
-                  getActiveTemplate(SECTION_KEY)
+                  getActiveTemplate(selection.inspectionTypeId, selection.propertyTypeId, SECTION_KEY)
                     .then((t) => {
-                      draft.setActiveTemplate(SECTION_KEY, t);
+                      draft.setActiveTemplate(pinKey, t);
                       setTemplate(t);
                     })
                     .catch(() => setLoadError(true));

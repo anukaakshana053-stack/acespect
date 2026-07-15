@@ -32,6 +32,12 @@ export interface DraftSection {
 export interface DraftTop {
   inspectionType: string;
   propertyType: string;
+  /** Raw lowercase ids (e.g. "dilapidation", "residential_house") — used to
+   *  address templates; distinct from the human-readable labels above, which
+   *  the submit payload uses. Set once, early, by whichever screen first has
+   *  the wizard's InspectionDraftSelection (today: Job Information). */
+  inspectionTypeId?: string;
+  propertyTypeId?: string;
   jobNo?: string;
   address?: string;
   suburb?: string;
@@ -47,6 +53,7 @@ export interface SubmitPayload extends DraftTop {
 
 interface DraftValue {
   setTop: (patch: Partial<DraftTop>) => void;
+  getTop: () => DraftTop;
   setSection: (section: DraftSection) => void;
   /** Register a captured photo under its sectionKey (e.g. "driveway:1", "overview"). */
   addPhoto: (sectionKey: string, uri: string) => void;
@@ -83,6 +90,8 @@ export function InspectionDraftProvider({ children }: { children: React.ReactNod
   const setTop = useCallback((patch: Partial<DraftTop>) => {
     topRef.current = { ...topRef.current, ...patch };
   }, []);
+
+  const getTop = useCallback(() => topRef.current, []);
 
   const setSection = useCallback((section: DraftSection) => {
     sectionsRef.current = { ...sectionsRef.current, [section.key]: section };
@@ -148,6 +157,7 @@ export function InspectionDraftProvider({ children }: { children: React.ReactNod
   const value = useMemo<DraftValue>(
     () => ({
       setTop,
+      getTop,
       setSection,
       addPhoto,
       reset,
@@ -156,7 +166,7 @@ export function InspectionDraftProvider({ children }: { children: React.ReactNod
       getActiveTemplate,
       setActiveTemplate,
     }),
-    [setTop, setSection, addPhoto, reset, collectPhotoUris, buildPayload, getActiveTemplate, setActiveTemplate],
+    [setTop, getTop, setSection, addPhoto, reset, collectPhotoUris, buildPayload, getActiveTemplate, setActiveTemplate],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

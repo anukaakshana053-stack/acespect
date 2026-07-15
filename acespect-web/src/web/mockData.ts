@@ -57,12 +57,37 @@ export interface Inspection {
 
 /* ─── Inspection templates (admin-defined form structure) ──────────── */
 export type TemplateStatus = "draft" | "published" | "archived";
-export type TemplateFieldType = "text" | "date" | "select-tiles" | "yesno";
+export type TemplateFieldType =
+  | "text" | "textarea" | "numeric" | "date"
+  | "yesno"
+  | "pill-select"
+  | "select-tiles"
+  | "color-select"
+  | "chip-multiselect"
+  | "photos"
+  | "repeating-group"
+  | "damage-list";
 
 export interface TemplateFieldOption {
   value: string;
   label: string;
   icon?: string;
+  color?: string;
+}
+
+/** Generalizes "hasDamage === 'yes' reveals the damages list" to any field. */
+export interface FieldGate {
+  fieldKey: string;
+  equals: string;
+}
+
+export interface RepeatConfig {
+  presentation: "strip" | "fixed-tabs" | "nested" | "checklist";
+  fixedInstances?: { key: string; label: string }[];
+  addable?: boolean;
+  addButtonLabel?: string;
+  minInstances?: number;
+  maxInstances?: number;
 }
 
 export interface TemplateField {
@@ -73,11 +98,20 @@ export interface TemplateField {
   required?: boolean;
   readOnly?: boolean;
   placeholder?: string;
+  maxLength?: number;
+  unit?: string;
   options?: TemplateFieldOption[];
+  allowOther?: boolean;
+  gate?: FieldGate;
+  repeat?: RepeatConfig; // present only when type is repeating-group | damage-list
+  itemFields?: TemplateField[]; // recursive sub-schema for one repeating instance
+  sectionLetter?: string;
 }
 
 export interface Template {
   id: string;
+  inspectionType: string;
+  propertyType: string;
   sectionKey: string;
   name: string;
   version: number;
@@ -87,6 +121,14 @@ export interface Template {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TemplateSummaryRow {
+  sectionKey: string;
+  publishedVersion: number | null;
+  publishedAt: string | null;
+  hasDraft: boolean;
+  draftId: string | null;
 }
 
 export const TEMPLATE_STATUS_CONFIG: Record<TemplateStatus, { label: string; color: string; bg: string }> = {

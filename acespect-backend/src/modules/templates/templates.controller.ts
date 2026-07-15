@@ -3,22 +3,38 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/ApiError';
 import { templatesService } from './templates.service';
 import { serializeTemplate } from './templates.serializers';
+import { TEMPLATABLE_SECTION_KEYS } from './templates.sections';
+
+function requireLineage(req: Request): { inspectionType: string; propertyType: string; sectionKey: string } {
+  const { inspectionType, propertyType, sectionKey } = req.params;
+  if (!inspectionType || !propertyType || !sectionKey) {
+    throw ApiError.badRequest('inspectionType, propertyType and sectionKey are required');
+  }
+  return { inspectionType, propertyType, sectionKey };
+}
 
 export const templatesController = {
   getActive: asyncHandler(async (req: Request, res: Response) => {
-    const { sectionKey } = req.params;
-    if (!sectionKey) throw ApiError.badRequest('Section key is required');
-    const template = await templatesService.getActive(sectionKey);
+    const template = await templatesService.getActive(requireLineage(req));
     res.status(200).json({ template: serializeTemplate(template) });
   }),
 
   list: asyncHandler(async (req: Request, res: Response) => {
-    const sectionKey = req.query.sectionKey;
-    if (typeof sectionKey !== 'string' || !sectionKey) {
-      throw ApiError.badRequest('sectionKey query param is required');
+    const { inspectionType, propertyType, sectionKey } = req.query;
+    if (typeof inspectionType !== 'string' || typeof propertyType !== 'string' || typeof sectionKey !== 'string') {
+      throw ApiError.badRequest('inspectionType, propertyType and sectionKey query params are required');
     }
-    const templates = await templatesService.list(sectionKey);
+    const templates = await templatesService.list({ inspectionType, propertyType, sectionKey });
     res.status(200).json({ templates: templates.map(serializeTemplate) });
+  }),
+
+  summary: asyncHandler(async (req: Request, res: Response) => {
+    const { inspectionType, propertyType } = req.query;
+    if (typeof inspectionType !== 'string' || typeof propertyType !== 'string') {
+      throw ApiError.badRequest('inspectionType and propertyType query params are required');
+    }
+    const summary = await templatesService.summary(inspectionType, propertyType, TEMPLATABLE_SECTION_KEYS);
+    res.status(200).json({ summary });
   }),
 
   getById: asyncHandler(async (req: Request, res: Response) => {

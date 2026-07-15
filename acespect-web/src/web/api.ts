@@ -1,4 +1,13 @@
-import type { Inspection, Role, User, InspectionStatus, SectionReviewStatus, Template, TemplateField } from "./mockData";
+import type {
+  Inspection,
+  Role,
+  User,
+  InspectionStatus,
+  SectionReviewStatus,
+  Template,
+  TemplateField,
+  TemplateSummaryRow,
+} from "./mockData";
 
 export const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:4000/api/v1";
@@ -101,10 +110,16 @@ export const api = {
   updateInspection: (id: string, patch: { status?: InspectionStatus; notes?: string; reviewerId?: string | null }) =>
     req<{ inspection: Inspection }>(`/web/inspections/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
 
-  getTemplates: (sectionKey: string) =>
-    req<{ templates: Template[] }>(`/templates?sectionKey=${encodeURIComponent(sectionKey)}`).then((d) => d.templates),
+  getTemplateSummary: (inspectionType: string, propertyType: string) =>
+    req<{ summary: TemplateSummaryRow[] }>(
+      `/templates/summary?inspectionType=${encodeURIComponent(inspectionType)}&propertyType=${encodeURIComponent(propertyType)}`,
+    ).then((d) => d.summary),
+  getTemplates: (inspectionType: string, propertyType: string, sectionKey: string) =>
+    req<{ templates: Template[] }>(
+      `/templates?inspectionType=${encodeURIComponent(inspectionType)}&propertyType=${encodeURIComponent(propertyType)}&sectionKey=${encodeURIComponent(sectionKey)}`,
+    ).then((d) => d.templates),
   getTemplate: (id: string) => req<{ template: Template }>(`/templates/${id}`).then((d) => d.template),
-  createTemplate: (data: { sectionKey: string; name: string; fields: TemplateField[] }) =>
+  createTemplate: (data: { inspectionType: string; propertyType: string; sectionKey: string; name: string; fields: TemplateField[] }) =>
     req<{ template: Template }>("/templates", { method: "POST", body: JSON.stringify(data) }).then((d) => d.template),
   updateTemplate: (id: string, patch: { name?: string; fields?: TemplateField[] }) =>
     req<{ template: Template }>(`/templates/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then(

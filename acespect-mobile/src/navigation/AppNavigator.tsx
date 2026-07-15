@@ -5,15 +5,7 @@ import { SelectInspectionTypeScreen } from '../screens/inspection/SelectInspecti
 import { JobInformationScreen } from '../screens/inspection/JobInformationScreen';
 import { InspectionSetupStep2Screen } from '../screens/inspection/InspectionSetupStep2Screen';
 import { InspectionSectionsScreen } from '../screens/inspection/InspectionSectionsScreen';
-import { DrivewaySectionScreen } from '../screens/inspection/DrivewaySectionScreen';
-import { PavingPathsScreen } from '../screens/inspection/PavingPathsScreen';
-import { FencesScreen, RetainingWallsScreen } from '../screens/inspection/StructureInspectionScreen';
-import { GarageCarportScreen } from '../screens/inspection/GarageCarportScreen';
-import { ElevationsScreen } from '../screens/inspection/ElevationsScreen';
-import { RoofChimneyScreen } from '../screens/inspection/RoofChimneyScreen';
-import { PoolSpaScreen } from '../screens/inspection/PoolSpaScreen';
-import { InternalAreasScreen } from '../screens/inspection/InternalAreasScreen';
-import { NotesPostProjectScreen } from '../screens/inspection/NotesPostProjectScreen';
+import { DynamicSectionScreen } from '../screens/inspection/DynamicSectionScreen';
 import { ReportSummaryScreen } from '../screens/inspection/ReportSummaryScreen';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -27,7 +19,11 @@ export function AppNavigator() {
       <Stack.Screen name="InspectionSections" component={InspectionSectionsScreen} />
       <Stack.Screen name="DrivewaySection">
         {({ navigation }) => (
-          <DrivewaySectionScreen
+          <DynamicSectionScreen
+            sectionKey="driveway"
+            sectionName="Driveway"
+            icon="🚗"
+            order={3}
             onBack={() => navigation.goBack()}
             // Report completion back to the hub so progress updates.
             onComplete={() =>
@@ -43,7 +39,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="PavingPaths">
         {({ navigation }) => (
-          <PavingPathsScreen
+          <DynamicSectionScreen
+            sectionKey="paving_paths"
+            sectionName="Paving & Paths"
+            icon="🚶"
+            order={4}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({
@@ -58,7 +58,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="Fences">
         {({ navigation }) => (
-          <FencesScreen
+          <DynamicSectionScreen
+            sectionKey="fences"
+            sectionName="Fences"
+            icon="🪵"
+            order={5}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'fences' }, merge: true })
@@ -69,7 +73,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="RetainingWalls">
         {({ navigation }) => (
-          <RetainingWallsScreen
+          <DynamicSectionScreen
+            sectionKey="retaining_walls"
+            sectionName="Retaining Walls"
+            icon="🧱"
+            order={6}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'retaining_walls' }, merge: true })
@@ -80,7 +88,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="GarageCarport">
         {({ navigation }) => (
-          <GarageCarportScreen
+          <DynamicSectionScreen
+            sectionKey="garage_carport_sheds"
+            sectionName="Garage / Carport / Sheds"
+            icon="🏚️"
+            order={7}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'garage_carport_sheds' }, merge: true })
@@ -91,7 +103,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="Elevations">
         {({ navigation }) => (
-          <ElevationsScreen
+          <DynamicSectionScreen
+            sectionKey="elevations"
+            sectionName="Elevations"
+            icon="🏠"
+            order={9}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'elevations' }, merge: true })
@@ -102,7 +118,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="RoofChimneys">
         {({ navigation }) => (
-          <RoofChimneyScreen
+          <DynamicSectionScreen
+            sectionKey="roof_chimneys"
+            sectionName="Roof Covering & Chimneys"
+            icon="🏘️"
+            order={10}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'roof_chimneys' }, merge: true })
@@ -113,7 +133,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="PoolSpa">
         {({ navigation }) => (
-          <PoolSpaScreen
+          <DynamicSectionScreen
+            sectionKey="pool_spa"
+            sectionName="Pool / Spa"
+            icon="🏊"
+            order={8}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'pool_spa' }, merge: true })
@@ -124,7 +148,11 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="InternalAreas">
         {({ navigation }) => (
-          <InternalAreasScreen
+          <DynamicSectionScreen
+            sectionKey="internal_areas"
+            sectionName="Internal Areas"
+            icon="🛋️"
+            order={11}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'internal_areas' }, merge: true })
@@ -135,7 +163,14 @@ export function AppNavigator() {
       </Stack.Screen>
       <Stack.Screen name="NotesPostProject">
         {({ navigation }) => (
-          <NotesPostProjectScreen
+          <DynamicSectionScreen
+            // Backend/template sectionKey is "notes"; the hub's completedId
+            // (below) is the older "notes_defects" -- the two must not be
+            // conflated, see constants/inspectionSections.ts.
+            sectionKey="notes"
+            sectionName="Notes / Post Project / Defects"
+            icon="📝"
+            order={12}
             onBack={() => navigation.goBack()}
             onComplete={() =>
               navigation.navigate({ name: 'InspectionSections', params: { completedId: 'notes_defects' }, merge: true })

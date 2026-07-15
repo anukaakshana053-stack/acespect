@@ -6,6 +6,8 @@ const STATUS_TO_WEB = { DRAFT: 'draft', PUBLISHED: 'published', ARCHIVED: 'archi
 export function serializeTemplate(t: InspectionTemplate) {
   return {
     id: t.id,
+    inspectionType: t.inspectionType,
+    propertyType: t.propertyType,
     sectionKey: t.sectionKey,
     name: t.name,
     version: t.version,

@@ -1,18 +1,29 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, ArrowUp, ArrowDown, Plus, Trash2, Save, Send } from "lucide-react";
+import { ArrowLeft, ArrowUp, ArrowDown, Plus, Trash2, Save, Send, ChevronDown, ChevronRight } from "lucide-react";
 import { PageShell, StatusBadge } from "../../components/WebLayout";
 import { TEMPLATE_STATUS_CONFIG, type Template, type TemplateField, type TemplateFieldType } from "../../mockData";
 import { api } from "../../api";
 
-const FIELD_TYPES: { value: TemplateFieldType; label: string }[] = [
+const LEAF_FIELD_TYPES: { value: TemplateFieldType; label: string }[] = [
   { value: "text", label: "Text" },
+  { value: "textarea", label: "Textarea" },
+  { value: "numeric", label: "Numeric" },
   { value: "date", label: "Date" },
-  { value: "select-tiles", label: "Select (tiles)" },
   { value: "yesno", label: "Yes / No" },
+  { value: "pill-select", label: "Select (pills)" },
+  { value: "select-tiles", label: "Select (tiles)" },
+  { value: "color-select", label: "Select (color-coded)" },
+  { value: "chip-multiselect", label: "Multi-select (chips)" },
+  { value: "photos", label: "Photos" },
+  { value: "repeating-group", label: "Repeating group" },
+  { value: "damage-list", label: "Damage / defect list" },
 ];
 
-const inputStyle: React.CSSProperties = {
+const OPTION_TYPES: TemplateFieldType[] = ["pill-select", "select-tiles", "color-select", "chip-multiselect"];
+const NESTED_TYPES: TemplateFieldType[] = ["repeating-group", "damage-list"];
+
+export const inputStyle: React.CSSProperties = {
   width: "100%", padding: "7px 10px", borderRadius: "7px",
   border: "1.5px solid #e5e7eb", background: "white",
   fontSize: "13px", color: "#1a2a4a", fontFamily: "Inter, -apple-system, sans-serif",
@@ -23,8 +34,322 @@ function emptyField(order: number): TemplateField {
   return { key: "", label: "", type: "text", order, required: false };
 }
 
+/**
+ * Recursive field-row-list editor. Leaf fields (text/date/select/etc) edit
+ * inline exactly as before; repeating-group/damage-list fields grow an
+ * expandable disclosure containing their repeat config + a nested instance
+ * of this SAME component editing `itemFields` -- this is what gives
+ * unlimited nesting depth (needed for InternalAreas' two levels: room
+ * types containing addable instances containing a damage-list) without a
+ * modal, so the admin never loses sight of the parent field.
+ */
+export function FieldListEditor({
+  fields,
+  onChange,
+  disabled,
+  depth = 0,
+}: {
+  fields: TemplateField[];
+  onChange: (fields: TemplateField[]) => void;
+  disabled: boolean;
+  depth?: number;
+}) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  function updateField(idx: number, patch: Partial<TemplateField>) {
+    onChange(fields.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  }
+  function move(idx: number, dir: -1 | 1) {
+    const swap = idx + dir;
+    if (swap < 0 || swap >= fields.length) return;
+    const next = [...fields];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    onChange(next.map((f, i) => ({ ...f, order: i })));
+  }
+  function addField() {
+    onChange([...fields, emptyField(fields.length)]);
+  }
+  function removeField(idx: number) {
+    onChange(fields.filter((_, i) => i !== idx).map((f, i) => ({ ...f, order: i })));
+  }
+  function addOption(idx: number) {
+    updateField(idx, { options: [...(fields[idx].options ?? []), { value: "", label: "" }] });
+  }
+  function updateOption(idx: number, optIdx: number, patch: Partial<{ value: string; label: string; icon: string; color: string }>) {
+    const options = (fields[idx].options ?? []).map((o, i) => (i === optIdx ? { ...o, ...patch } : o));
+    updateField(idx, { options });
+  }
+  function removeOption(idx: number, optIdx: number) {
+    updateField(idx, { options: (fields[idx].options ?? []).filter((_, i) => i !== optIdx) });
+  }
+  function addFixedInstance(idx: number) {
+    const repeat = fields[idx].repeat ?? { presentation: "strip" as const };
+    updateField(idx, { repeat: { ...repeat, fixedInstances: [...(repeat.fixedInstances ?? []), { key: "", label: "" }] } });
+  }
+  function updateFixedInstance(idx: number, instIdx: number, patch: Partial<{ key: string; label: string }>) {
+    const repeat = fields[idx].repeat;
+    if (!repeat) return;
+    const fixedInstances = (repeat.fixedInstances ?? []).map((f, i) => (i === instIdx ? { ...f, ...patch } : f));
+    updateField(idx, { repeat: { ...repeat, fixedInstances } });
+  }
+  function removeFixedInstance(idx: number, instIdx: number) {
+    const repeat = fields[idx].repeat;
+    if (!repeat) return;
+    updateField(idx, { repeat: { ...repeat, fixedInstances: (repeat.fixedInstances ?? []).filter((_, i) => i !== instIdx) } });
+  }
+  function toggleExpanded(idx: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }
+
+  const priorKeys = (uptoIdx: number) => fields.slice(0, uptoIdx).map((f) => f.key).filter(Boolean);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {fields.map((field, idx) => {
+        const isNested = NESTED_TYPES.includes(field.type);
+        const isOpen = expanded.has(idx);
+        return (
+          <div key={idx} style={{ background: depth > 0 ? "#f8fafc" : "white", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "14px 16px" }}>
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
+              {isNested && (
+                <button
+                  onClick={() => toggleExpanded(idx)}
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 2px", color: "#64748b" }}
+                  title={isOpen ? "Collapse" : "Expand"}
+                >
+                  {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+              )}
+              <div style={{ flex: "1 1 140px" }}>
+                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Key</label>
+                <input value={field.key} disabled={disabled} onChange={(e) => updateField(idx, { key: e.target.value })} style={inputStyle} />
+              </div>
+              <div style={{ flex: "1 1 180px" }}>
+                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Label</label>
+                <input value={field.label} disabled={disabled} onChange={(e) => updateField(idx, { label: e.target.value })} style={inputStyle} />
+              </div>
+              <div style={{ flex: "0 1 170px" }}>
+                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Type</label>
+                <select
+                  value={field.type}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const type = e.target.value as TemplateFieldType;
+                    const isNestedNow = NESTED_TYPES.includes(type);
+                    updateField(idx, {
+                      type,
+                      repeat: isNestedNow ? (field.repeat ?? { presentation: "strip" }) : undefined,
+                      itemFields: isNestedNow ? field.itemFields ?? [] : undefined,
+                    });
+                  }}
+                  style={inputStyle}
+                >
+                  {LEAF_FIELD_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#374151", paddingBottom: "8px" }}>
+                <input type="checkbox" checked={!!field.required} disabled={disabled} onChange={(e) => updateField(idx, { required: e.target.checked })} />
+                Required
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#374151", paddingBottom: "8px" }}>
+                <input type="checkbox" checked={!!field.readOnly} disabled={disabled} onChange={(e) => updateField(idx, { readOnly: e.target.checked })} />
+                Read-only
+              </label>
+              {field.type === "chip-multiselect" && (
+                <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#374151", paddingBottom: "8px" }}>
+                  <input type="checkbox" checked={!!field.allowOther} disabled={disabled} onChange={(e) => updateField(idx, { allowOther: e.target.checked })} />
+                  Allow "Other"
+                </label>
+              )}
+              <div style={{ flex: "0 1 70px" }}>
+                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Group</label>
+                <input
+                  placeholder="A"
+                  value={field.sectionLetter ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => updateField(idx, { sectionLetter: e.target.value || undefined })}
+                  style={inputStyle}
+                />
+              </div>
+              {!disabled && (
+                <div style={{ display: "flex", gap: "4px", paddingBottom: "4px" }}>
+                  <IconBtn onClick={() => move(idx, -1)} disabled={idx === 0}><ArrowUp size={13} /></IconBtn>
+                  <IconBtn onClick={() => move(idx, 1)} disabled={idx === fields.length - 1}><ArrowDown size={13} /></IconBtn>
+                  <IconBtn onClick={() => removeField(idx)} danger><Trash2 size={13} /></IconBtn>
+                </div>
+              )}
+            </div>
+
+            {/* Gate: show this field only when an earlier sibling equals a value */}
+            {priorKeys(idx).length > 0 && (
+              <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center", fontSize: "12px", color: "#64748b" }}>
+                <span>Show only when</span>
+                <select
+                  value={field.gate?.fieldKey ?? ""}
+                  disabled={disabled}
+                  onChange={(e) =>
+                    updateField(idx, e.target.value ? { gate: { fieldKey: e.target.value, equals: field.gate?.equals ?? "yes" } } : { gate: undefined })
+                  }
+                  style={{ ...inputStyle, width: "auto" }}
+                >
+                  <option value="">(always shown)</option>
+                  {priorKeys(idx).map((k) => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+                {field.gate && (
+                  <>
+                    <span>equals</span>
+                    <input
+                      value={field.gate.equals}
+                      disabled={disabled}
+                      onChange={(e) => updateField(idx, { gate: { fieldKey: field.gate!.fieldKey, equals: e.target.value } })}
+                      style={{ ...inputStyle, width: "100px" }}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Options editor for select-type leaf fields */}
+            {OPTION_TYPES.includes(field.type) && (
+              <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
+                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "6px" }}>Options</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {(field.options ?? []).map((opt, optIdx) => (
+                    <div key={optIdx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <input placeholder="value" value={opt.value} disabled={disabled} onChange={(e) => updateOption(idx, optIdx, { value: e.target.value })} style={{ ...inputStyle, flex: "0 1 110px" }} />
+                      <input placeholder="label" value={opt.label} disabled={disabled} onChange={(e) => updateOption(idx, optIdx, { label: e.target.value })} style={{ ...inputStyle, flex: "1 1 140px" }} />
+                      {field.type === "select-tiles" && (
+                        <input placeholder="icon" value={opt.icon ?? ""} disabled={disabled} onChange={(e) => updateOption(idx, optIdx, { icon: e.target.value })} style={{ ...inputStyle, flex: "1 1 120px" }} />
+                      )}
+                      {field.type === "color-select" && (
+                        <input placeholder="#hex color" value={opt.color ?? ""} disabled={disabled} onChange={(e) => updateOption(idx, optIdx, { color: e.target.value })} style={{ ...inputStyle, flex: "1 1 110px" }} />
+                      )}
+                      {!disabled && <IconBtn onClick={() => removeOption(idx, optIdx)} danger><Trash2 size={12} /></IconBtn>}
+                    </div>
+                  ))}
+                  {!disabled && (
+                    <button onClick={() => addOption(idx)} style={{ alignSelf: "flex-start", fontSize: "11px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: "4px 0", fontWeight: 600 }}>
+                      + Add option
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Repeat config + nested itemFields editor for repeating-group/damage-list */}
+            {isNested && isOpen && (
+              <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
+                  <div style={{ flex: "0 1 160px" }}>
+                    <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Presentation</label>
+                    <select
+                      value={field.repeat?.presentation ?? "strip"}
+                      disabled={disabled}
+                      onChange={(e) => updateField(idx, { repeat: { ...(field.repeat ?? { presentation: "strip" }), presentation: e.target.value as "strip" | "fixed-tabs" | "nested" | "checklist" } })}
+                      style={inputStyle}
+                    >
+                      <option value="strip">Strip (scrollable, addable)</option>
+                      <option value="fixed-tabs">Fixed tabs (not addable)</option>
+                      <option value="nested">Nested (fixed types, addable instances)</option>
+                      <option value="checklist">Checklist (fixed rows)</option>
+                    </select>
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#374151", paddingBottom: "8px" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!field.repeat?.addable}
+                      disabled={disabled}
+                      onChange={(e) => updateField(idx, { repeat: { ...(field.repeat ?? { presentation: "strip" }), addable: e.target.checked } })}
+                    />
+                    Addable
+                  </label>
+                  {field.repeat?.addable && (
+                    <div style={{ flex: "1 1 180px" }}>
+                      <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Add-button label</label>
+                      <input
+                        value={field.repeat?.addButtonLabel ?? ""}
+                        disabled={disabled}
+                        onChange={(e) => updateField(idx, { repeat: { ...(field.repeat ?? { presentation: "strip" }), addButtonLabel: e.target.value } })}
+                        style={inputStyle}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {(field.repeat?.presentation === "fixed-tabs" || field.repeat?.presentation === "nested" || field.repeat?.presentation === "checklist") && (
+                  <div style={{ marginBottom: "12px" }}>
+                    <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "6px" }}>
+                      {field.repeat.presentation === "checklist" ? "Rows" : "Fixed instances"}
+                    </label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {(field.repeat.fixedInstances ?? []).map((inst, instIdx) => (
+                        <div key={instIdx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          <input placeholder="key" value={inst.key} disabled={disabled} onChange={(e) => updateFixedInstance(idx, instIdx, { key: e.target.value })} style={{ ...inputStyle, flex: "0 1 140px" }} />
+                          <input placeholder="label" value={inst.label} disabled={disabled} onChange={(e) => updateFixedInstance(idx, instIdx, { label: e.target.value })} style={{ ...inputStyle, flex: "1 1 180px" }} />
+                          {!disabled && <IconBtn onClick={() => removeFixedInstance(idx, instIdx)} danger><Trash2 size={12} /></IconBtn>}
+                        </div>
+                      ))}
+                      {!disabled && (
+                        <button onClick={() => addFixedInstance(idx)} style={{ alignSelf: "flex-start", fontSize: "11px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: "4px 0", fontWeight: 600 }}>
+                          + Add {field.repeat.presentation === "checklist" ? "row" : "instance"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "6px" }}>
+                  Fields within each {field.type === "damage-list" ? "damage record" : "instance"}
+                </label>
+                <FieldListEditor
+                  fields={field.itemFields ?? []}
+                  onChange={(itemFields) => updateField(idx, { itemFields })}
+                  disabled={disabled}
+                  depth={depth + 1}
+                />
+                {!disabled && (
+                  <button
+                    onClick={() => updateField(idx, { itemFields: [...(field.itemFields ?? []), emptyField((field.itemFields ?? []).length)] })}
+                    style={{ marginTop: "10px", fontSize: "11px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: "4px 0", fontWeight: 600 }}
+                  >
+                    + Add field to {field.type === "damage-list" ? "damage record" : "instance"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {!disabled && (
+        <button
+          onClick={addField}
+          style={{
+            padding: "9px 16px", borderRadius: "8px", background: "white",
+            border: "1.5px dashed #cbd5e1", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "6px",
+            color: "#64748b", fontSize: "12px", fontWeight: 600, alignSelf: "flex-start",
+          }}
+        >
+          <Plus size={14} /> Add Field
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function AdminTemplateEditor() {
-  const { id } = useParams<{ id: string }>();
+  const { inspectionType, propertyType, sectionKey, id } = useParams<{
+    inspectionType: string; propertyType: string; sectionKey: string; id: string;
+  }>();
   const navigate = useNavigate();
   const [template, setTemplate] = useState<Template | null>(null);
   const [name, setName] = useState("");
@@ -51,41 +376,7 @@ export function AdminTemplateEditor() {
 
   const isDraft = template.status === "draft";
   const sc = TEMPLATE_STATUS_CONFIG[template.status];
-
-  function updateField(idx: number, patch: Partial<TemplateField>) {
-    setFields((prev) => prev.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
-  }
-
-  function move(idx: number, dir: -1 | 1) {
-    setFields((prev) => {
-      const next = [...prev];
-      const swap = idx + dir;
-      if (swap < 0 || swap >= next.length) return prev;
-      [next[idx], next[swap]] = [next[swap], next[idx]];
-      return next.map((f, i) => ({ ...f, order: i }));
-    });
-  }
-
-  function addField() {
-    setFields((prev) => [...prev, emptyField(prev.length)]);
-  }
-
-  function removeField(idx: number) {
-    setFields((prev) => prev.filter((_, i) => i !== idx).map((f, i) => ({ ...f, order: i })));
-  }
-
-  function addOption(idx: number) {
-    updateField(idx, { options: [...(fields[idx].options ?? []), { value: "", label: "" }] });
-  }
-
-  function updateOption(idx: number, optIdx: number, patch: Partial<{ value: string; label: string; icon: string }>) {
-    const options = (fields[idx].options ?? []).map((o, i) => (i === optIdx ? { ...o, ...patch } : o));
-    updateField(idx, { options });
-  }
-
-  function removeOption(idx: number, optIdx: number) {
-    updateField(idx, { options: (fields[idx].options ?? []).filter((_, i) => i !== optIdx) });
-  }
+  const backTo = `/admin/templates/${inspectionType}/${propertyType}`;
 
   async function saveDraft() {
     if (!id) return;
@@ -105,7 +396,7 @@ export function AdminTemplateEditor() {
     try {
       await saveDraft();
       await api.publishTemplate(id);
-      navigate("/admin/templates");
+      navigate(backTo);
     } finally {
       setPublishing(false);
     }
@@ -114,12 +405,12 @@ export function AdminTemplateEditor() {
   return (
     <PageShell
       title={name || "Template"}
-      subtitle={template.sectionKey}
+      subtitle={`${sectionKey} — ${inspectionType} / ${propertyType}`}
       actions={
         <>
           <StatusBadge label={`v${template.version} · ${sc.label}`} color={sc.color} bg={sc.bg} />
           <button
-            onClick={() => navigate("/admin/templates")}
+            onClick={() => navigate(backTo)}
             style={{
               height: "32px", padding: "0 12px", borderRadius: "8px", background: "white",
               border: "1px solid #e5e7eb", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
@@ -149,89 +440,9 @@ export function AdminTemplateEditor() {
         />
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
-        {fields.map((field, idx) => (
-          <div key={idx} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-            <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 160px" }}>
-                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Key</label>
-                <input value={field.key} disabled={!isDraft} onChange={(e) => updateField(idx, { key: e.target.value })} style={inputStyle} />
-              </div>
-              <div style={{ flex: "1 1 200px" }}>
-                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Label</label>
-                <input value={field.label} disabled={!isDraft} onChange={(e) => updateField(idx, { label: e.target.value })} style={inputStyle} />
-              </div>
-              <div style={{ flex: "0 1 150px" }}>
-                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "3px" }}>Type</label>
-                <select
-                  value={field.type}
-                  disabled={!isDraft}
-                  onChange={(e) => updateField(idx, { type: e.target.value as TemplateFieldType })}
-                  style={inputStyle}
-                >
-                  {FIELD_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#374151", paddingBottom: "8px" }}>
-                <input type="checkbox" checked={!!field.required} disabled={!isDraft} onChange={(e) => updateField(idx, { required: e.target.checked })} />
-                Required
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#374151", paddingBottom: "8px" }}>
-                <input type="checkbox" checked={!!field.readOnly} disabled={!isDraft} onChange={(e) => updateField(idx, { readOnly: e.target.checked })} />
-                Read-only
-              </label>
-              {isDraft && (
-                <div style={{ display: "flex", gap: "4px", paddingBottom: "4px" }}>
-                  <IconBtn onClick={() => move(idx, -1)} disabled={idx === 0}><ArrowUp size={13} /></IconBtn>
-                  <IconBtn onClick={() => move(idx, 1)} disabled={idx === fields.length - 1}><ArrowDown size={13} /></IconBtn>
-                  <IconBtn onClick={() => removeField(idx)} danger><Trash2 size={13} /></IconBtn>
-                </div>
-              )}
-            </div>
-
-            {(field.type === "select-tiles" || field.type === "yesno") && (
-              <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
-                <label style={{ fontSize: "10px", fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: "6px" }}>Options</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {(field.options ?? []).map((opt, optIdx) => (
-                    <div key={optIdx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <input placeholder="value" value={opt.value} disabled={!isDraft} onChange={(e) => updateOption(idx, optIdx, { value: e.target.value })} style={{ ...inputStyle, flex: "0 1 120px" }} />
-                      <input placeholder="label" value={opt.label} disabled={!isDraft} onChange={(e) => updateOption(idx, optIdx, { label: e.target.value })} style={{ ...inputStyle, flex: "1 1 160px" }} />
-                      {field.type === "select-tiles" && (
-                        <input placeholder="icon (optional)" value={opt.icon ?? ""} disabled={!isDraft} onChange={(e) => updateOption(idx, optIdx, { icon: e.target.value })} style={{ ...inputStyle, flex: "1 1 140px" }} />
-                      )}
-                      {isDraft && (
-                        <IconBtn onClick={() => removeOption(idx, optIdx)} danger><Trash2 size={12} /></IconBtn>
-                      )}
-                    </div>
-                  ))}
-                  {isDraft && (
-                    <button onClick={() => addOption(idx)} style={{ alignSelf: "flex-start", fontSize: "11px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: "4px 0", fontWeight: 600 }}>
-                      + Add option
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+      <div style={{ marginBottom: "20px" }}>
+        <FieldListEditor fields={fields} onChange={setFields} disabled={!isDraft} />
       </div>
-
-      {isDraft && (
-        <button
-          onClick={addField}
-          style={{
-            padding: "9px 16px", borderRadius: "8px", background: "white",
-            border: "1.5px dashed #cbd5e1", cursor: "pointer",
-            display: "flex", alignItems: "center", gap: "6px",
-            color: "#64748b", fontSize: "12px", fontWeight: 600, marginBottom: "24px",
-          }}
-        >
-          <Plus size={14} /> Add Field
-        </button>
-      )}
 
       {isDraft && (
         <div style={{ display: "flex", gap: "10px", paddingTop: "16px", borderTop: "1px solid #e5e7eb" }}>
