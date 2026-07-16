@@ -5,6 +5,10 @@
   - Added the required column `propertyType` to the `inspection_templates` table without a default value. This is not possible if the table is not empty.
 
 */
+-- Clear the pilot's throwaway rows (pre-profile-dimension, pre-launch) so the
+-- new NOT NULL columns below can be added without a default.
+DELETE FROM "inspection_templates";
+
 -- DropIndex
 DROP INDEX "inspection_templates_sectionKey_status_idx";
 
