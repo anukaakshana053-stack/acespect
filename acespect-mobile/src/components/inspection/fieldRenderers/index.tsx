@@ -48,7 +48,9 @@ export function FieldListRenderer({
         return (
           <React.Fragment key={field.key}>
             {showLetterHeader && (
-              <Text style={styles.letterHeader}>SECTION {field.sectionLetter}</Text>
+              <Text style={styles.letterHeader}>
+                {field.sectionLetter && field.sectionLetter.length <= 2 ? `SECTION ${field.sectionLetter}` : field.sectionLetter}
+              </Text>
             )}
             <Renderer
               field={field}
