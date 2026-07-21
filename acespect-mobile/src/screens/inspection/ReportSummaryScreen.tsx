@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, radius, shadows, spacing, typography } from '../../theme';
-import { INSPECTION_SECTION_GROUPS, INSPECTION_SECTIONS, TOTAL_SECTIONS } from '../../constants/inspectionSections';
+import { getSectionGroupsForProperty } from '../../constants/inspectionSections';
 import { INSPECTION_TYPES } from '../../constants/inspectionData';
 import { AppScreenProps } from '../../navigation/types';
 import { useInspectionDraft } from '../../context/InspectionDraftContext';
@@ -112,9 +112,13 @@ export function ReportSummaryScreen({ navigation, route }: AppScreenProps<'Repor
   const draft = useInspectionDraft();
   const [submitting, setSubmitting] = useState(false);
 
-  const completedCount = INSPECTION_SECTIONS.filter((s) => completed[s.id]).length;
-  const remaining = TOTAL_SECTIONS - completedCount;
-  const pct = TOTAL_SECTIONS ? Math.round((completedCount / TOTAL_SECTIONS) * 100) : 0;
+  const sectionGroups = getSectionGroupsForProperty(data.selection.propertyTypeId);
+  const sections = sectionGroups.flatMap((g) => g.sections);
+  const totalSections = sections.length;
+
+  const completedCount = sections.filter((s) => completed[s.id]).length;
+  const remaining = totalSections - completedCount;
+  const pct = totalSections ? Math.round((completedCount / totalSections) * 100) : 0;
 
   const inspectionTypeLabel =
     INSPECTION_TYPES.find((t) => t.id === data.selection.inspectionTypeId)?.title ?? data.selection.inspectionTypeId;
@@ -231,8 +235,8 @@ export function ReportSummaryScreen({ navigation, route }: AppScreenProps<'Repor
         {/* Section overview (real completion) */}
         <View style={styles.card}>
           <SectionTitle label="Section Overview" />
-          <Text style={styles.overviewMeta}>{completedCount} of {TOTAL_SECTIONS} sections completed</Text>
-          {INSPECTION_SECTION_GROUPS.map((group) => (
+          <Text style={styles.overviewMeta}>{completedCount} of {totalSections} sections completed</Text>
+          {sectionGroups.map((group) => (
             <View key={group.title} style={styles.group}>
               <View style={styles.groupTag}>
                 <Text style={styles.groupTagText}>{group.title.toUpperCase()}</Text>

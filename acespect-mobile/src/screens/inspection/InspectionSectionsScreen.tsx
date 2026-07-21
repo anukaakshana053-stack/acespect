@@ -7,12 +7,11 @@ import { colors, radius, spacing, typography } from '../../theme';
 import { Button } from '../../components/ui';
 import { InspectionHeader } from '../../components/inspection/InspectionHeader';
 import {
-  INSPECTION_SECTION_GROUPS,
-  INSPECTION_SECTIONS,
+  getSectionGroupsForProperty,
   InspectionSectionItem,
-  TOTAL_SECTIONS,
 } from '../../constants/inspectionSections';
 import { AppScreenProps } from '../../navigation/types';
+import { useInspectionDraft } from '../../context/InspectionDraftContext';
 
 /**
  * Inspection Sections hub — the landing screen after Setup Step 2.
@@ -27,6 +26,12 @@ export function InspectionSectionsScreen({
   route,
 }: AppScreenProps<'InspectionSections'>) {
   const [completed, setCompleted] = useState<Record<string, boolean>>({});
+  const draft = useInspectionDraft();
+  const { propertyTypeId } = draft.getTop();
+
+  const sectionGroups = getSectionGroupsForProperty(propertyTypeId);
+  const sections = sectionGroups.flatMap((g) => g.sections);
+  const totalSections = sections.length;
 
   // A finished section navigates back here with its id — fold it into progress.
   const completedId = route.params?.completedId;
@@ -34,8 +39,8 @@ export function InspectionSectionsScreen({
     if (completedId) setCompleted((prev) => ({ ...prev, [completedId]: true }));
   }, [completedId]);
 
-  const completedCount = INSPECTION_SECTIONS.filter((s) => completed[s.id]).length;
-  const progress = TOTAL_SECTIONS ? completedCount / TOTAL_SECTIONS : 0;
+  const completedCount = sections.filter((s) => completed[s.id]).length;
+  const progress = totalSections ? completedCount / totalSections : 0;
   const pct = Math.round(progress * 100);
 
   const openSection = (section: InspectionSectionItem) => {
@@ -52,7 +57,7 @@ export function InspectionSectionsScreen({
   };
 
   const onNext = () => {
-    const next = INSPECTION_SECTIONS.find((s) => s.route && !completed[s.id]);
+    const next = sections.find((s) => s.route && !completed[s.id]);
     if (next) {
       openSection(next);
     } else {
@@ -86,7 +91,7 @@ export function InspectionSectionsScreen({
           <View style={[styles.fill, { width: `${pct}%` }]} />
         </View>
         <Text style={styles.progressMeta}>
-          {completedCount} of {TOTAL_SECTIONS} sections completed
+          {completedCount} of {totalSections} sections completed
         </Text>
       </View>
 
@@ -95,7 +100,7 @@ export function InspectionSectionsScreen({
         contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
       >
-        {INSPECTION_SECTION_GROUPS.map((group) => (
+        {sectionGroups.map((group) => (
           <View key={group.title}>
             <Text style={styles.groupTitle}>{group.title.toUpperCase()}</Text>
             {group.sections.map((section) => {

@@ -69,3 +69,49 @@ export const INSPECTION_SECTIONS: InspectionSectionItem[] = INSPECTION_SECTION_G
 );
 
 export const TOTAL_SECTIONS = INSPECTION_SECTIONS.length;
+
+/**
+ * Public Assets has no building to inspect -- there's no driveway, pool,
+ * garage, roof or internal rooms on a road/laneway survey. Only the
+ * sections the Houspect Public Assets template actually asks for apply:
+ * Job Information, Description & Overview (site/scope/safety), the
+ * Elevations section (repurposed on the backend as the Part A/B road +
+ * laneway survey), Notes (safety matters), and the final sign-off.
+ */
+const PUBLIC_ASSETS_SECTION_IDS = new Set([
+  'job_information',
+  'description_overview',
+  'elevations',
+  'notes_defects',
+  'report_signoff',
+]);
+
+/** Per-property-type title overrides -- "Elevations" doesn't make sense for a road/laneway survey. */
+const PUBLIC_ASSETS_TITLE_OVERRIDES: Record<string, { group?: string; section?: string }> = {
+  elevations: { group: 'Road & Laneway Survey', section: 'Road & Laneway Survey' },
+};
+
+/**
+ * Returns the section groups relevant to a given property type, dropping
+ * sections (and any group left empty) that don't apply. Every property
+ * type other than Public Assets sees the full, unfiltered list.
+ */
+export function getSectionGroupsForProperty(propertyTypeId?: string): InspectionSectionGroup[] {
+  if (propertyTypeId !== 'public_assets') return INSPECTION_SECTION_GROUPS;
+
+  let n = 0;
+  return INSPECTION_SECTION_GROUPS.map((group) => {
+    const sections = group.sections
+      .filter((s) => PUBLIC_ASSETS_SECTION_IDS.has(s.id))
+      .map((s) => {
+        const override = PUBLIC_ASSETS_TITLE_OVERRIDES[s.id];
+        n += 1;
+        return { ...s, number: n, title: override?.section ?? s.title };
+      });
+    if (sections.length === 0) return null;
+    const groupOverride = sections
+      .map((s) => PUBLIC_ASSETS_TITLE_OVERRIDES[s.id]?.group)
+      .find(Boolean);
+    return { title: groupOverride ?? group.title, sections };
+  }).filter((g): g is InspectionSectionGroup => g !== null);
+}

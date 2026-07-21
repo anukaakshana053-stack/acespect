@@ -41,10 +41,8 @@ export function ConfirmStartModal({
 }: ConfirmStartModalProps) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
-  const allChecked = useMemo(
-    () => items.every((item) => checked[item.id]),
-    [items, checked],
-  );
+  const checkedCount = useMemo(() => items.filter((item) => checked[item.id]).length, [items, checked]);
+  const allChecked = checkedCount === items.length;
 
   const toggle = (id: string) =>
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -125,6 +123,20 @@ export function ConfirmStartModal({
             </Text>
           </View>
 
+          {/* Live progress hint — flips from a muted count to a green "ready" state as items are ticked. */}
+          <View style={styles.readyHint}>
+            <Ionicons
+              name={allChecked ? 'checkmark-circle' : 'ellipse-outline'}
+              size={16}
+              color={allChecked ? colors.success : colors.textMuted}
+            />
+            <Text style={[styles.readyHintText, allChecked && styles.readyHintTextDone]}>
+              {allChecked
+                ? 'All items confirmed — ready to start'
+                : `${checkedCount} of ${items.length} confirmed`}
+            </Text>
+          </View>
+
           {/* Actions */}
           <View style={styles.actions}>
             <Button
@@ -135,7 +147,7 @@ export function ConfirmStartModal({
             />
             <Button
               label="Start Inspection"
-              variant="primaryGradient"
+              variant={allChecked ? 'successGradient' : 'primaryGradient'}
               disabled={!allChecked}
               loading={loading}
               onPress={handleConfirm}
@@ -235,6 +247,15 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   bannerBold: { fontWeight: '700' },
+  readyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  readyHintText: { ...typography.caption, fontWeight: '700', color: colors.textMuted },
+  readyHintTextDone: { color: colors.success },
   actions: { flexDirection: 'row', gap: spacing.md },
   actionBtn: { flex: 1 },
 });
