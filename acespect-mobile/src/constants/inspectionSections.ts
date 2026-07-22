@@ -22,11 +22,11 @@ export interface InspectionSectionGroup {
 export const INSPECTION_SECTION_GROUPS: InspectionSectionGroup[] = [
   {
     title: 'Job Information',
-    sections: [{ id: 'job_information', number: 1, title: 'Job Information' }],
+    sections: [{ id: 'job_information', number: 1, title: 'Job Information', route: 'JobInformation' }],
   },
   {
     title: 'Description & Overview',
-    sections: [{ id: 'description_overview', number: 2, title: 'Description & Overview' }],
+    sections: [{ id: 'description_overview', number: 2, title: 'Description & Overview', route: 'InspectionSetupStep2' }],
   },
   {
     title: 'External Inspection',
@@ -72,17 +72,17 @@ export const TOTAL_SECTIONS = INSPECTION_SECTIONS.length;
 
 /**
  * Public Assets has no building to inspect -- there's no driveway, pool,
- * garage, roof or internal rooms on a road/laneway survey. Only the
- * sections the Houspect Public Assets template actually asks for apply:
- * Job Information, Description & Overview (site/scope/safety), the
- * Elevations section (repurposed on the backend as the Part A/B road +
- * laneway survey), Notes (safety matters), and the final sign-off.
+ * garage, roof or internal rooms on a road/laneway survey, and no post-
+ * project/notes checklist. Only the sections the Houspect Public Assets
+ * template actually asks for apply: Job Information, Description &
+ * Overview (site/scope/safety), and the Elevations section (repurposed on
+ * the backend as the Part A/B road + laneway survey, which already carries
+ * its own safety-matters field), and the final sign-off.
  */
 const PUBLIC_ASSETS_SECTION_IDS = new Set([
   'job_information',
   'description_overview',
   'elevations',
-  'notes_defects',
   'report_signoff',
 ]);
 

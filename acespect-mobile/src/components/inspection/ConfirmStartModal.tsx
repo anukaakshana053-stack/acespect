@@ -146,8 +146,8 @@ export function ConfirmStartModal({
               style={styles.actionBtn}
             />
             <Button
-              label="Start Inspection"
-              variant={allChecked ? 'successGradient' : 'primaryGradient'}
+              label="Start"
+              variant="primaryGradient"
               disabled={!allChecked}
               loading={loading}
               onPress={handleConfirm}

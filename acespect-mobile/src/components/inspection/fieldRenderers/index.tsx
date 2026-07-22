@@ -48,9 +48,11 @@ export function FieldListRenderer({
         return (
           <React.Fragment key={field.key}>
             {showLetterHeader && (
-              <Text style={styles.letterHeader}>
-                {field.sectionLetter && field.sectionLetter.length <= 2 ? `SECTION ${field.sectionLetter}` : field.sectionLetter}
-              </Text>
+              <View style={styles.letterHeaderBand}>
+                <Text style={styles.letterHeaderText}>
+                  {field.sectionLetter && field.sectionLetter.length <= 2 ? `SECTION ${field.sectionLetter}` : field.sectionLetter}
+                </Text>
+              </View>
             )}
             <Renderer
               field={field}
@@ -230,13 +232,22 @@ export * from './types';
 
 const styles = StyleSheet.create({
   block: { marginBottom: spacing.lg },
-  letterHeader: {
-    ...typography.caption,
-    color: colors.textMuted,
+  letterHeaderBand: {
+    backgroundColor: colors.accentBlue,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.barBlue,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    marginTop: spacing.md,
+  },
+  letterHeaderText: {
+    ...typography.label,
+    color: colors.barBlue,
     fontWeight: '700',
     letterSpacing: 0.6,
-    marginBottom: spacing.sm,
-    marginTop: spacing.xs,
+    textTransform: 'uppercase',
   },
   groupLabel: { ...typography.label, color: colors.textSecondary, marginBottom: spacing.sm },
   tabStrip: { marginBottom: spacing.md },

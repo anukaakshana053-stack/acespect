@@ -49,6 +49,15 @@ export function InspectionSectionsScreen({
       navigation.navigate('ReportSummary', { completed, data: route.params.data });
       return;
     }
+    if (section.route === 'JobInformation') {
+      // Re-enter to review/edit what was already captured for this inspection.
+      navigation.navigate('JobInformation', { selection: route.params.data.selection });
+      return;
+    }
+    if (section.route === 'InspectionSetupStep2') {
+      navigation.navigate('InspectionSetupStep2', { data: route.params.data });
+      return;
+    }
     if (section.route) {
       navigation.navigate(section.route as never);
       return;
